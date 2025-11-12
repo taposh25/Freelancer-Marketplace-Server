@@ -123,9 +123,7 @@ app.use(cors());
 app.use(express.json());
 
 // MongoDB connection
- const uri = "mongodb+srv://jobsDB:vqmd2jD2as96piWU@cluster0.aa4hy5v.mongodb.net/?appName=Cluster0";
-
-
+const uri = "mongodb+srv://jobsDB:vqmd2jD2as96piWU@cluster0.aa4hy5v.mongodb.net/?appName=Cluster0";
 
 const client = new MongoClient(uri, {
   serverApi: {
@@ -145,22 +143,24 @@ async function run() {
     const db = client.db("freelance_marketplace_db");
     const jobsCollection = db.collection("jobs");
     const usersCollection = db.collection("users");
+    const acceptedTasksCollection = db.collection("acceptedTasks"); // ✅ new collection
 
-    // Add Job
+    /* ---------------------- JOB CRUD ---------------------- */
+
+    // ➕ Add Job
     app.post('/addJob', async (req, res) => {
       const newJob = req.body;
       const result = await jobsCollection.insertOne(newJob);
       res.send(result);
     });
 
-  // Get all job
+    // 📋 Get all jobs
     app.get('/allJobs', async (req, res) => {
       const jobs = await jobsCollection.find().toArray();
       res.send(jobs);
     });
 
-    // Get single job
-
+    // 🔍 Get single job by ID
     app.get('/allJobs/:id', async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
@@ -168,8 +168,7 @@ async function run() {
       res.send(job);
     });
 
-   // Updated job by ID
-
+    // ✏️ Update job by ID
     app.patch('/updateJob/:id', async (req, res) => {
       const id = req.params.id;
       const updatedJob = req.body;
@@ -189,8 +188,7 @@ async function run() {
       res.send(result);
     });
 
-    // Delete Job by ID
-
+    // ❌ Delete job
     app.delete('/deleteJob/:id', async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
@@ -198,9 +196,7 @@ async function run() {
       res.send(result);
     });
 
-
-    //  Get jobs by user email
-
+    // 👤 Get jobs by user email
     app.get('/myAddedJobs', async (req, res) => {
       const email = req.query.email;
       const query = email ? { userEmail: email } : {};
@@ -208,19 +204,55 @@ async function run() {
       res.send(result);
     });
 
+    /* ---------------------- ACCEPTED TASKS ---------------------- */
 
-    //  Get accepted-tasks
-    
-    app.get('/my-accepted-tasks', async (req, res) => {
-      const email = req.query.email;
-      const query = email ? { acceptedBy: email } : {};
-      const result = await jobsCollection.find(query).toArray();
+    // ✅ Accept a job
+    app.post('/acceptedTasks', async (req, res) => {
+      const acceptedTask = req.body;
+
+      // Prevent duplicate acceptance of the same job by same user
+      const existing = await acceptedTasksCollection.findOne({
+        jobId: acceptedTask.jobId,
+        acceptedBy: acceptedTask.acceptedBy
+      });
+
+      if (existing) {
+        return res.send({ message: "You have already accepted this job." });
+      }
+
+      const result = await acceptedTasksCollection.insertOne(acceptedTask);
       res.send(result);
     });
 
+    // 📋 Get all accepted tasks for logged-in user
+    app.get('/my-accepted-tasks', async (req, res) => {
+      const email = req.query.email;
+      const query = email ? { acceptedBy: email } : {};
+      const result = await acceptedTasksCollection.find(query).toArray();
+      res.send(result);
+    });
 
-    //  User post
+    // ✅ Update task status (Done / Cancel)
+    app.patch('/acceptedTasks/:id', async (req, res) => {
+      const id = req.params.id;
+      const { status } = req.body; // expected: { status: "done" } or { status: "cancelled" }
+      const query = { _id: new ObjectId(id) };
+      const update = { $set: { status } };
+      const result = await acceptedTasksCollection.updateOne(query, update);
+      res.send(result);
+    });
 
+    // ❌ Delete accepted task (for cancelled / completed)
+    app.delete('/acceptedTasks/:id', async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await acceptedTasksCollection.deleteOne(query);
+      res.send(result);
+    });
+
+    /* ---------------------- USERS ---------------------- */
+
+    // 👥 Register user
     app.post('/users', async (req, res) => {
       const newUser = req.body;
       const query = { email: newUser.email };
@@ -232,16 +264,16 @@ async function run() {
       res.send(result);
     });
 
-    
+    // ✅ Connection test
     await client.db("admin").command({ ping: 1 });
     console.log("✅ MongoDB connected successfully!");
   } finally {
-    
+    // do not close connection for dev environment
   }
 }
 
 run().catch(console.dir);
 
 app.listen(port, () => {
-  console.log(` Server is running on port: ${port}`);
+  console.log(`🚀 Server is running on port: ${port}`);
 });
